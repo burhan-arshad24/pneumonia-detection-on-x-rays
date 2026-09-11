@@ -20,19 +20,45 @@ def load_pneumonia_model():
 
 model = load_pneumonia_model()
 
-def predict_image(image):
+def preprocess_image(image):
     image = ImageOps.exif_transpose(image)
     image = image.convert("RGB")
-    image = image.resize(IMG_SIZE)
-
-    img_array = np.asarray(image, dtype=np.float32)
-    img_array = np.expand_dims(img_array, axis=0)
-
-    pneumonia_probability = float(
-        model.predict(img_array, verbose=0)[0][0]
+    image = image.resize(
+        IMG_SIZE,
+        Image.Resampling.LANCZOS
     )
 
-    normal_probability = 1 - pneumonia_probability
+    img_array = np.asarray(
+        image,
+        dtype=np.float32
+    )
+
+    img_array = np.expand_dims(
+        img_array,
+        axis=0
+    )
+
+    return img_array
+
+def predict_image(image):
+    img_array = preprocess_image(image)
+
+    prediction_output = model.predict(
+        img_array,
+        verbose=0
+    )
+
+    pneumonia_probability = float(
+        prediction_output[0][0]
+    )
+
+    pneumonia_probability = np.clip(
+        pneumonia_probability,
+        0.0,
+        1.0
+    )
+
+    normal_probability = 1.0 - pneumonia_probability
 
     if pneumonia_probability >= 0.5:
         prediction = "PNEUMONIA"
@@ -41,8 +67,12 @@ def predict_image(image):
         prediction = "NORMAL"
         confidence = normal_probability
 
-    return prediction, confidence, pneumonia_probability, normal_probability
-
+    return (
+        prediction,
+        confidence,
+        pneumonia_probability,
+        normal_probability
+    )
 
 st.markdown(
     """
@@ -102,7 +132,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
 st.markdown(
     '<div class="main-title">Chest X-Ray Pneumonia Detection</div>',
     unsafe_allow_html=True
@@ -113,11 +142,9 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
 tab1, tab2, tab3 = st.tabs(
     ["Test Model", "Sample X-Rays", "About Model"]
 )
-
 
 with tab1:
 
@@ -138,10 +165,19 @@ with tab1:
         col1, col2 = st.columns([1, 1])
 
         with col1:
+
             st.image(
                 image,
                 caption="Uploaded X-Ray",
                 width=450
+            )
+
+            st.caption(
+                f"Original size: {image.size[0]} × {image.size[1]}"
+            )
+
+            st.caption(
+                f"Model input: {IMG_SIZE[0]} × {IMG_SIZE[1]} RGB"
             )
 
         with col2:
@@ -171,7 +207,7 @@ with tab1:
             )
 
             st.progress(
-                confidence
+                float(confidence)
             )
 
             st.markdown(
@@ -184,7 +220,7 @@ with tab1:
             )
 
             st.progress(
-                normal_probability
+                float(normal_probability)
             )
 
             st.write(
@@ -192,7 +228,7 @@ with tab1:
             )
 
             st.progress(
-                pneumonia_probability
+                float(pneumonia_probability)
             )
 
             st.markdown(
@@ -208,7 +244,6 @@ with tab1:
                 st.success(
                     "The model predicts that this X-ray is normal."
                 )
-
 
 with tab2:
 
@@ -286,7 +321,6 @@ with tab2:
                     f"Missing: {filename}"
                 )
 
-
     st.subheader("Pneumonia Samples")
 
     pneumonia_cols = st.columns(3)
@@ -339,7 +373,6 @@ with tab2:
                 st.warning(
                     f"Missing: {filename}"
                 )
-
 
 with tab3:
 
@@ -397,7 +430,12 @@ with tab3:
 
         ### Preprocessing
 
-        Images are converted to RGB and resized to 150 × 150 pixels.
+        Uploaded images are automatically:
+
+        - Corrected for EXIF orientation
+        - Converted to RGB
+        - Resized to 150 × 150 pixels
+        - Converted to float32 before prediction
 
         Pixel normalization is performed inside the trained model using
         a Rescaling layer.
@@ -411,13 +449,11 @@ with tab3:
         - Pneumonia Recall: 94%
         - Pneumonia F1-score: 0.90
         """
-
     )
 
     st.info(
         "This application is a machine learning demonstration and is not intended to provide medical diagnosis or replace professional medical advice."
     )
-
 
 st.markdown(
     '<div class="footer">CNN Pneumonia Detection Project</div>',
